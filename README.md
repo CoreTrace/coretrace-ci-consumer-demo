@@ -10,3 +10,15 @@ to validate the analyzer in a "consumer project" scenario:
 The code intentionally contains one out-of-bounds stack write to keep the test
 signal stable and easy to validate.
 
+
+
+## CI integration modes
+
+This demo repository contains both supported integration styles:
+
+- GHCR image (pinned tag): `.github/workflows/coretrace-analysis.yml`
+- GitHub Action module (pinned tag): `.github/workflows/coretrace-analysis-action-tag.yml`
+
+Notes:
+- The GHCR workflow runs on push/PR/main and uses `ghcr.io/coretrace/coretrace-stack-analyzer-ci:v0.1.2`.
+- The Action-tag workflow is `workflow_dispatch` only to avoid duplicate runs.

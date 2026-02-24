@@ -1,22 +1,15 @@
-name: CoreTrace Analysis (GHCR Tag)
+name: CoreTrace Analysis (Action Tag)
 
 on:
-  pull_request:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # Pinned GHCR image tag for reproducible CI.
-  CORETRACE_IMAGE: ghcr.io/coretrace/coretrace-stack-analyzer-ci:v0.1.2
-
 jobs:
   stack-analysis:
-    name: Stack Analysis (GHCR)
+    name: Stack Analysis (Action @v0.1.2)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -44,38 +37,32 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
-      - name: Pull CoreTrace CI image
-        run: |
-          docker pull "${CORETRACE_IMAGE}"
-
-      - name: Run CoreTrace analyzer via GHCR image
-        run: |
-          mkdir -p artifacts
-          docker run --rm \
-            -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
-            -w "${GITHUB_WORKSPACE}" \
-            "${CORETRACE_IMAGE}" \
-            --compdb "${GITHUB_WORKSPACE}/build/compile_commands.json" \
-            --json-out "${GITHUB_WORKSPACE}/artifacts/coretrace-stack-analysis.json" \
-            --sarif-out "${GITHUB_WORKSPACE}/artifacts/coretrace-stack-analysis.sarif" \
-            --base-dir "${GITHUB_WORKSPACE}" \
-            --fail-on error \
-            --analyzer-arg=--analysis-profile=fast \
-            --analyzer-arg=--resource-summary-cache-memory-only \
-            --analyzer-arg=--resource-model=/models/resource-lifetime/generic.txt
+      - name: Run CoreTrace analyzer via pinned action tag
+        id: coretrace
+        uses: CoreTrace/coretrace-stack-analyzer@v0.1.2
+        with:
+          compile-commands: build/compile_commands.json
+          analysis-profile: fast
+          resource-model: default
+          resource-cache-memory-only: "true"
+          fail-on: error
+          warnings-only: "false"
+          json-file: artifacts/coretrace-stack-analysis-action.json
+          sarif-file: artifacts/coretrace-stack-analysis-action.sarif
+          upload-sarif: "false"
 
       - name: Upload SARIF to Code Scanning
-        if: ${{ always() && hashFiles('artifacts/coretrace-stack-analysis.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) }}
+        if: ${{ always() && hashFiles('artifacts/coretrace-stack-analysis-action.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: artifacts/coretrace-stack-analysis.sarif
-          category: coretrace-consumer
+          sarif_file: artifacts/coretrace-stack-analysis-action.sarif
+          category: coretrace-consumer-action-tag
 
       - name: Upload analysis artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coretrace-results
+          name: coretrace-results-action-tag
           path: artifacts/
           retention-days: 14
 
@@ -88,7 +75,7 @@ jobs:
           from pathlib import Path
 
           summary_path = os.environ['GITHUB_STEP_SUMMARY']
-          json_path = Path('artifacts/coretrace-stack-analysis.json')
+          json_path = Path('artifacts/coretrace-stack-analysis-action.json')
 
           errors = warnings = infos = 0
           notes = []
@@ -120,7 +107,7 @@ jobs:
           print(f'infos={infos}')
 
           with open(summary_path, 'a', encoding='utf-8') as f:
-            f.write('## CoreTrace Analysis Summary\n\n')
+            f.write('## CoreTrace Analysis Summary (Action Tag)\n\n')
             f.write('| Errors | Warnings | Info |\n')
             f.write('|--------|----------|------|\n')
             f.write(f'| {errors} | {warnings} | {infos} |\n\n')
