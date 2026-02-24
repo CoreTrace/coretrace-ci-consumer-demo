@@ -6,6 +6,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CORETRACE_IMAGE: ghcr.io/coretrace/coretrace-stack-analyzer-ci:latest
 
@@ -13,6 +17,7 @@ jobs:
   stack-analysis:
     name: Stack Analysis (GHCR)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       security-events: write
@@ -23,6 +28,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Cache CMake build directory
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: ${{ runner.os }}-cmake-${{ hashFiles('CMakeLists.txt', 'src/**', 'include/**') }}
+          restore-keys: |
+            ${{ runner.os }}-cmake-
 
       - name: Configure project (compile_commands.json)
         run: |
@@ -51,34 +64,67 @@ jobs:
             --analyzer-arg=--resource-model=/models/resource-lifetime/generic.txt
 
       - name: Upload SARIF to Code Scanning
-        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
+        if: ${{ always() && hashFiles('artifacts/coretrace-stack-analysis.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) }}
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: artifacts/coretrace-stack-analysis.sarif
           category: coretrace-consumer
 
+      - name: Upload analysis artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coretrace-results
+          path: artifacts/
+          retention-days: 14
+
       - name: Print summary
+        if: always()
         run: |
           python3 - <<'PY'
           import json
+          import os
           from pathlib import Path
 
-          p = Path('artifacts/coretrace-stack-analysis.json')
-          data = json.loads(p.read_text(encoding='utf-8'))
-          diags = data.get('diagnostics', [])
+          summary_path = os.environ['GITHUB_STEP_SUMMARY']
+          json_path = Path('artifacts/coretrace-stack-analysis.json')
 
-          def sev(d):
-            s = str(d.get('severity', d.get('level', d.get('details', {}).get('severity', '')))).upper()
-            if s in {'2', 'ERROR'}:
-              return 'ERROR'
-            if s in {'1', 'WARNING', 'WARN'}:
-              return 'WARNING'
-            return 'INFO'
+          errors = warnings = infos = 0
+          notes = []
 
-          errors = sum(1 for d in diags if sev(d) == 'ERROR')
-          warnings = sum(1 for d in diags if sev(d) == 'WARNING')
-          infos = sum(1 for d in diags if sev(d) == 'INFO')
+          if json_path.is_file():
+            try:
+              data = json.loads(json_path.read_text(encoding='utf-8'))
+              diags = data.get('diagnostics', []) if isinstance(data, dict) else []
+            except Exception as exc:
+              diags = []
+              notes.append(f'Failed to parse JSON report: {exc}')
+
+            def sev(d):
+              s = str(d.get('severity', d.get('level', d.get('details', {}).get('severity', '')))).upper()
+              if s in {'2', 'ERROR'}:
+                return 'ERROR'
+              if s in {'1', 'WARNING', 'WARN'}:
+                return 'WARNING'
+              return 'INFO'
+
+            errors = sum(1 for d in diags if sev(d) == 'ERROR')
+            warnings = sum(1 for d in diags if sev(d) == 'WARNING')
+            infos = sum(1 for d in diags if sev(d) == 'INFO')
+          else:
+            notes.append('JSON report not found (analysis step may have failed early).')
+
           print(f'errors={errors}')
           print(f'warnings={warnings}')
           print(f'infos={infos}')
+
+          with open(summary_path, 'a', encoding='utf-8') as f:
+            f.write('## CoreTrace Analysis Summary\n\n')
+            f.write('| Errors | Warnings | Info |\n')
+            f.write('|--------|----------|------|\n')
+            f.write(f'| {errors} | {warnings} | {infos} |\n\n')
+            if notes:
+              f.write('### Notes\n')
+              for note in notes:
+                f.write(f'- {note}\n')
           PY
