@@ -9,7 +9,7 @@ concurrency:
 
 jobs:
   stack-analysis:
-    name: Stack Analysis (Action @v0.1.2)
+    name: Stack Analysis (Action @v0.14.0)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -39,7 +39,7 @@ jobs:
 
       - name: Run CoreTrace analyzer via pinned action tag
         id: coretrace
-        uses: CoreTrace/coretrace-stack-analyzer@v0.1.2
+        uses: CoreTrace/coretrace-stack-analyzer@v0.14.0
         with:
           compile-commands: build/compile_commands.json
           analysis-profile: fast

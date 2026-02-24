@@ -12,7 +12,7 @@ concurrency:
 
 env:
   # Pinned GHCR image tag for reproducible CI.
-  CORETRACE_IMAGE: ghcr.io/coretrace/coretrace-stack-analyzer-ci:v0.1.2
+  CORETRACE_IMAGE: ghcr.io/coretrace/coretrace-stack-analyzer-ci:v0.14.0
 
 jobs:
   stack-analysis:
