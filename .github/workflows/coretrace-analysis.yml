@@ -6,9 +6,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  CORETRACE_IMAGE: ghcr.io/coretrace/coretrace-stack-analyzer-ci:latest
+
 jobs:
   stack-analysis:
-    name: Stack Analysis
+    name: Stack Analysis (GHCR)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -26,23 +29,54 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
-      - name: Run CoreTrace analyzer
-        id: coretrace
-        uses: CoreTrace/coretrace-stack-analyzer@v0
+      - name: Pull CoreTrace CI image
+        run: |
+          docker pull "${CORETRACE_IMAGE}"
+
+      - name: Run CoreTrace analyzer via GHCR image
+        run: |
+          mkdir -p artifacts
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            "${CORETRACE_IMAGE}" \
+            --compdb /workspace/build/compile_commands.json \
+            --json-out /workspace/artifacts/coretrace-stack-analysis.json \
+            --sarif-out /workspace/artifacts/coretrace-stack-analysis.sarif \
+            --base-dir /workspace \
+            --fail-on error \
+            --analyzer-arg=--analysis-profile=fast \
+            --analyzer-arg=--resource-summary-cache-memory-only \
+            --analyzer-arg=--resource-model=/models/resource-lifetime/generic.txt
+
+      - name: Upload SARIF to Code Scanning
+        uses: github/codeql-action/upload-sarif@v4
         with:
-          compile-commands: build/compile_commands.json
-          analysis-profile: fast
-          resource-model: default
-          resource-cache-memory-only: "true"
-          fail-on: error
-          warnings-only: "false"
-          json-file: artifacts/coretrace-stack-analysis.json
-          sarif-file: artifacts/coretrace-stack-analysis.sarif
-          upload-sarif: "true"
+          sarif_file: artifacts/coretrace-stack-analysis.sarif
+          category: coretrace-consumer
 
       - name: Print summary
         run: |
-          echo "errors=${{ steps.coretrace.outputs.errors }}"
-          echo "warnings=${{ steps.coretrace.outputs.warnings }}"
-          echo "sarif=${{ steps.coretrace.outputs.sarif-file }}"
-          echo "json=${{ steps.coretrace.outputs.json-file }}"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          p = Path('artifacts/coretrace-stack-analysis.json')
+          data = json.loads(p.read_text(encoding='utf-8'))
+          diags = data.get('diagnostics', [])
+
+          def sev(d):
+            s = str(d.get('severity', d.get('level', d.get('details', {}).get('severity', '')))).upper()
+            if s in {'2', 'ERROR'}:
+              return 'ERROR'
+            if s in {'1', 'WARNING', 'WARN'}:
+              return 'WARNING'
+            return 'INFO'
+
+          errors = sum(1 for d in diags if sev(d) == 'ERROR')
+          warnings = sum(1 for d in diags if sev(d) == 'WARNING')
+          infos = sum(1 for d in diags if sev(d) == 'INFO')
+          print(f'errors={errors}')
+          print(f'warnings={warnings}')
+          print(f'infos={infos}')
+          PY
