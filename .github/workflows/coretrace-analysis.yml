@@ -16,6 +16,7 @@ jobs:
     permissions:
       contents: read
       security-events: write
+      packages: read
 
     steps:
       - name: Checkout
@@ -29,6 +30,13 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USER }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
       - name: Pull CoreTrace CI image
         run: |
           docker pull "${CORETRACE_IMAGE}"
@@ -37,13 +45,13 @@ jobs:
         run: |
           mkdir -p artifacts
           docker run --rm \
-            -v "$PWD:/workspace" \
-            -w /workspace \
+            -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
+            -w "${GITHUB_WORKSPACE}" \
             "${CORETRACE_IMAGE}" \
-            --compdb /workspace/build/compile_commands.json \
-            --json-out /workspace/artifacts/coretrace-stack-analysis.json \
-            --sarif-out /workspace/artifacts/coretrace-stack-analysis.sarif \
-            --base-dir /workspace \
+            --compdb "${GITHUB_WORKSPACE}/build/compile_commands.json" \
+            --json-out "${GITHUB_WORKSPACE}/artifacts/coretrace-stack-analysis.json" \
+            --sarif-out "${GITHUB_WORKSPACE}/artifacts/coretrace-stack-analysis.sarif" \
+            --base-dir "${GITHUB_WORKSPACE}" \
             --fail-on error \
             --analyzer-arg=--analysis-profile=fast \
             --analyzer-arg=--resource-summary-cache-memory-only \
