@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
       security-events: write
       packages: read
 
@@ -51,6 +52,7 @@ jobs:
             --analyzer-arg=--resource-model=/models/resource-lifetime/generic.txt
 
       - name: Upload SARIF to Code Scanning
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: artifacts/coretrace-stack-analysis.sarif
