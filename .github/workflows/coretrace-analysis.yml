@@ -15,9 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      actions: read
       security-events: write
-      packages: read
+      actions: read
 
     steps:
       - name: Checkout
