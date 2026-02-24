@@ -1,0 +1,4 @@
+/Users/hugopayet/Desktop/CLaude/test/fixtures/ci-consumer-project/build/CMakeFiles/consumer_utils.dir
+/Users/hugopayet/Desktop/CLaude/test/fixtures/ci-consumer-project/build/CMakeFiles/consumer_app.dir
+/Users/hugopayet/Desktop/CLaude/test/fixtures/ci-consumer-project/build/CMakeFiles/edit_cache.dir
+/Users/hugopayet/Desktop/CLaude/test/fixtures/ci-consumer-project/build/CMakeFiles/rebuild_cache.dir
