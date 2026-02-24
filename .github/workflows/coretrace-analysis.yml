@@ -30,14 +30,6 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
-      - name: Login GHCR (optional)
-        if: ${{ secrets.GHCR_USER != '' && secrets.GHCR_TOKEN != '' }}
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ secrets.GHCR_USER }}
-          password: ${{ secrets.GHCR_TOKEN }}
-
       - name: Pull CoreTrace CI image
         run: |
           docker pull "${CORETRACE_IMAGE}"
